@@ -24,7 +24,8 @@ BKASH_NUMBER = "01611026722"
 USD_RATE = 130
 
 ASK_AMOUNT, ASK_TRXID = range(2)
-ASK_PUBLIC_PRICE, ASK_COMMISSION, ASK_DISCOUNT_PRICE, ASK_QUANTITY = range(2, 6)
+ASK_PUBLIC_PRICE, ASK_COMMISSION, ASK_DISCOUNT_PRICE, ASK_QUANTITY, ASK_USER_ID, ASK_USER_ACTION, ASK_USER_AMOUNT = range(2, 9)
+
 
 
 flask_app = Flask(__name__)
@@ -78,12 +79,14 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             keyboard = []
             for p in products:
-                # অ্যাডমিনকে আসল দাম (Buy Price) দেখানো হচ্ছে
                 btn_text = f"⚙️ {p['name']} (Buy: ${p['price']})"
-                keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"admin_prod_{p['id']}")])
+                keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"admin_prod_{p['id']}", style='primary')])
+
+            # নতুন ইউজার ম্যানেজমেন্ট বাটন
+            keyboard.append([InlineKeyboardButton("👥 ইউজার ম্যানেজমেন্ট (Manage Users)", callback_data="admin_manage_users", style='success')])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await wait_msg.edit_text("👑 **অ্যাডমিন প্যানেল**\n\nপাবলিক প্রাইস, কমিশন এবং ডিসকাউন্ট সেট করতে যেকোনো প্রোডাক্টে ক্লিক করুন:", parse_mode='Markdown', reply_markup=reply_markup)
+            await wait_msg.edit_text("👑 **অ্যাডমিন প্যানেল**\n\nপাবলিক প্রাইস সেট করতে প্রোডাক্টে ক্লিক করুন অথবা ইউজার ম্যানেজ করুন:", parse_mode='Markdown', reply_markup=reply_markup)
 
         else:
             await wait_msg.edit_text("❌ হোস্ট API এর সাথে কানেক্ট করা যাচ্ছে না।")
@@ -103,7 +106,7 @@ async def admin_product_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     product_id = query.data.split('admin_prod_')[1]
     context.user_data['admin_product_id'] = product_id
     
-    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel')]]
+    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]]
     
     # edit_message_text এর বদলে reply_text ব্যবহার করা হলো, যাতে প্রোডাক্ট লিস্ট উপরে থেকে যায়
     await query.message.reply_text(
@@ -116,7 +119,7 @@ async def admin_product_click(update: Update, context: ContextTypes.DEFAULT_TYPE
     return ASK_PUBLIC_PRICE
 
 async def process_public_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel')]]
+    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]]
     try:
         price = float(update.message.text)
         context.user_data['admin_public_price'] = price
@@ -132,7 +135,7 @@ async def process_public_price(update: Update, context: ContextTypes.DEFAULT_TYP
         return ASK_PUBLIC_PRICE
 
 async def process_commission(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel')]]
+    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]]
     try:
         comm = float(update.message.text)
         context.user_data['admin_commission'] = comm
@@ -171,7 +174,7 @@ async def process_discount_price(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
         
     except ValueError:
-        cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel')]]
+        cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]]
         await update.message.reply_text("❌ অনুগ্রহ করে শুধুমাত্র সংখ্যা লিখুন:", reply_markup=InlineKeyboardMarkup(cancel_kb))
         return ASK_DISCOUNT_PRICE
 
@@ -224,6 +227,139 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='Markdown'
     )
 
+# --- ইউজার ম্যানেজমেন্ট (Admin) ---
+async def admin_manage_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    # ১. ডাটাবেস থেকে সব ইউজারের লিস্ট বের করা
+    conn = sqlite3.connect('bot_database.db', timeout=10)
+    cursor = conn.cursor()
+    cursor.execute("SELECT telegram_id, balance, total_purchases FROM users")
+    all_users = cursor.fetchall()
+    conn.close()
+    
+    if not all_users:
+        await query.message.reply_text("❌ আপনার বটে এখনো কোনো ইউজার নেই।")
+        return ConversationHandler.END
+        
+    # ২. ইউজারদের লিস্ট টেক্সট হিসেবে সাজানো
+    user_list_text = "👥 **বটের সকল ইউজারের তালিকা:**\n\n"
+    for u in all_users:
+        user_list_text += f"🆔 `{u[0]}` | 💰 ${u[1]} | 🛍 {u[2]}টি\n"
+        
+    # ৩. টেলিগ্রামের মেসেজ লিমিট (4096 ক্যারেক্টার) হ্যান্ডল করা
+    if len(user_list_text) > 4000:
+        user_list_text = user_list_text[:4000] + "\n... (আরও অনেক ইউজার আছে)"
+        
+    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]]
+    
+    # ৪. প্রথমে ইউজারের লিস্ট পাঠানো
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=user_list_text, parse_mode='Markdown')
+    
+    # ৫. এরপর আইডি চাওয়া
+    await query.message.reply_text("👆 উপরের লিস্ট থেকে যেই ইউজারের ব্যালেন্স পরিবর্তন করতে চান, তার **Telegram ID** কপি করে এখানে দিন:", parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(cancel_kb))
+    return ASK_USER_ID
+
+
+async def process_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]]
+    try:
+        target_user_id = int(update.message.text.strip())
+        context.user_data['target_user_id'] = target_user_id
+        
+        conn = sqlite3.connect('bot_database.db', timeout=10)
+        cursor = conn.cursor()
+        cursor.execute("SELECT balance, total_purchases FROM users WHERE telegram_id = ?", (target_user_id,))
+        res = cursor.fetchone()
+        conn.close()
+        
+        if res:
+            balance, purchases = res
+            
+            # --- টেলিগ্রাম সার্ভার থেকে লাইভ ইউজারনেম বের করার স্মার্ট লজিক ---
+            user_display_name = "অজানা (Unknown)"
+            try:
+                chat = await context.bot.get_chat(chat_id=target_user_id)
+                if chat.username:
+                    user_display_name = f"@{chat.username}"
+                elif chat.first_name:
+                    user_display_name = chat.first_name
+            except Exception as e:
+                # যদি ইউজার বট ব্লক করে থাকে বা ডেটা না পাওয়া যায়
+                user_display_name = f"⚠️ ডেটা নেই ({str(e)})"
+
+            keyboard = [
+                [InlineKeyboardButton("➕ ব্যালেন্স যোগ করুন", callback_data="admin_add_bal", style='success'),
+                 InlineKeyboardButton("➖ ব্যালেন্স কাটুন", callback_data="admin_deduct_bal", style='danger')],
+                [InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]
+            ]
+            
+            # টেক্সটের ভেতরে ইউজারনেম অ্যাড করা হলো
+            text = (
+                f"👤 **ইউজার প্রোফাইল**\n"
+                f"🆔 আইডি: `{target_user_id}`\n"
+                f"📛 নাম/ইউজারনেম: {user_display_name}\n"
+                f"💰 বর্তমান ব্যালেন্স: **${balance}**\n"
+                f"🛍 মোট কেনাকাটা: {purchases}টি\n\n"
+                f"আপনি কী করতে চান?"
+            )
+            await update.message.reply_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard))
+            return ASK_USER_ACTION
+            
+        else:
+            await update.message.reply_text("❌ এই আইডির কোনো ইউজার ডাটাবেসে পাওয়া যায়নি। সঠিক আইডি দিন:", reply_markup=InlineKeyboardMarkup(cancel_kb))
+            return ASK_USER_ID
+            
+    except ValueError:
+        await update.message.reply_text("❌ অনুগ্রহ করে সঠিক আইডি (নম্বর) দিন:", reply_markup=InlineKeyboardMarkup(cancel_kb))
+        return ASK_USER_ID
+
+
+async def admin_user_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    action = query.data
+    context.user_data['target_action'] = action
+    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]]
+    
+    text = "কত ডলার **যোগ (Add)** করতে চান তা লিখুন:" if action == 'admin_add_bal' else "কত ডলার **কাটতে (Deduct)** চান তা লিখুন:"
+    await query.message.reply_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(cancel_kb))
+    return ASK_USER_AMOUNT
+
+async def process_user_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cancel_kb = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='admin_cancel', style='danger')]]
+    try:
+        amount = float(update.message.text.strip())
+        target_user_id = context.user_data['target_user_id']
+        action = context.user_data['target_action']
+        
+        conn = sqlite3.connect('bot_database.db', timeout=10)
+        cursor = conn.cursor()
+        cursor.execute("SELECT balance FROM users WHERE telegram_id = ?", (target_user_id,))
+        res = cursor.fetchone()
+        
+        if res:
+            current_balance = res[0]
+            new_balance = round(current_balance + amount, 2) if action == 'admin_add_bal' else round(current_balance - amount, 2)
+                
+            cursor.execute("UPDATE users SET balance = ? WHERE telegram_id = ?", (new_balance, target_user_id))
+            conn.commit()
+            await update.message.reply_text(f"✅ সফলভাবে ব্যালেন্স আপডেট করা হয়েছে!\n\n👤 ইউজার আইডি: `{target_user_id}`\n💰 নতুন ব্যালেন্স: **${new_balance}**", parse_mode='Markdown')
+            
+            # ইউজারকে নোটিফিকেশন পাঠানো
+            try:
+                msg = f"💰 অ্যাডমিন আপনার একাউন্টে **${amount}** যোগ করেছেন!" if action == 'admin_add_bal' else f"📉 অ্যাডমিন আপনার একাউন্ট থেকে **${amount}** কেটে নিয়েছেন।"
+                await context.bot.send_message(chat_id=target_user_id, text=msg, parse_mode='Markdown')
+            except:
+                pass
+        
+        conn.close()
+        return ConversationHandler.END
+    except ValueError:
+        await update.message.reply_text("❌ অনুগ্রহ করে শুধুমাত্র সংখ্যা লিখুন:", reply_markup=InlineKeyboardMarkup(cancel_kb))
+        return ASK_USER_AMOUNT
+
 
 # ----------------- বটের লজিক -----------------
 
@@ -251,17 +387,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     conn.close()
 
-    # মেইন মেনুতে রেফার বাটন অ্যাড করা হলো
+    # মেইন মেনুতে বাটন কালার (style) অ্যাড করা হলো
     keyboard = [
-        [InlineKeyboardButton("🛒 শপ (Shop)", callback_data='shop')],
-        [InlineKeyboardButton("💰 ডিপোজিট (Deposit)", callback_data='deposit')],
-        [InlineKeyboardButton("👤 আমার একাউন্ট (My Account)", callback_data='account')],
-        [InlineKeyboardButton("🎁 রেফার এন্ড আর্ন (Refer & Earn)", callback_data='refer')],
-        [InlineKeyboardButton("📞 সাপোর্ট (Support)", callback_data='support')]
+        [InlineKeyboardButton("🛒 শপ (Shop)", callback_data='shop', style='primary'),
+         InlineKeyboardButton("💰 ডিপোজিট (Deposit)", callback_data='deposit', style='primary')],
+        [InlineKeyboardButton("👤 আমার একাউন্ট (My Account)", callback_data='account', style='primary'),
+         InlineKeyboardButton("🎁 রেফার এন্ড আর্ন (Refer & Earn)", callback_data='refer', style='success')],
+        [InlineKeyboardButton("📞 সাপোর্ট (Support)", callback_data='support', style='danger')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("ডিজিটাল শপে স্বাগতম! 🛍️\n\nআপনার প্রয়োজনীয় সেবাটি বেছে নিন:", reply_markup=reply_markup)
+    
+    msg_text = (
+        "<blockquote><tg-emoji emoji-id='5368324170671202286'>✨</tg-emoji> <b>Welcome to darkorb1t Shop!</b></blockquote>\n\n"
+        "আপনার প্রয়োজনীয় সেবাটি বেছে নিন:"
+    )
+    
+    # message_effect_id দিয়ে পার্টি পপার (🎉) অ্যানিমেশন যুক্ত করা হলো
+    await update.message.reply_text(
+        msg_text, 
+        parse_mode='HTML', 
+        reply_markup=reply_markup, 
+        message_effect_id="5046509860389126442"
+    )
     return ConversationHandler.END
+
 
 
 async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -282,7 +431,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- আগের বাটন লজিকগুলো ---
     if query.data == 'deposit':
-        keyboard = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='cancel_action')]]
+        keyboard = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='cancel_action', style='danger')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         text = (
             "আপনি কত ডলার ($) ডিপোজিট করতে চান?\n"
@@ -301,7 +450,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
         balance = cursor.fetchone()[0]
         conn.close()
         
-        keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu')]]
+        keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu', style='danger')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(f"👤 আপনার বর্তমান ব্যালেন্স: ${balance}", reply_markup=reply_markup)
         return ConversationHandler.END
@@ -325,13 +474,13 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔗 **আপনার রেফারেল লিংক (কপি করতে ট্যাপ করুন):**\n`{referral_link}`"
         )
         
-        keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu')]]
+        keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu', style='danger')]]
         await query.edit_message_text(text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
         return ConversationHandler.END
  
     
     elif query.data == 'support':
-        keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu')]]
+        keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu', style='danger')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text("📞 সাপোর্টের জন্য অ্যাডমিনের সাথে যোগাযোগ করুন: @darkorb1t", reply_markup=reply_markup)
         return ConversationHandler.END
@@ -346,7 +495,7 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if resp.status_code == 200:
                 products = resp.json().get("products", [])
                 if not products:
-                    keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu')]]
+                    keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu', style='danger')]]
                     await query.edit_message_text("দুঃখিত, এই মুহূর্তে শপে কোনো প্রোডাক্ট নেই।", reply_markup=InlineKeyboardMarkup(keyboard))
                     return ConversationHandler.END
                 
@@ -363,10 +512,8 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     
                 keyboard = []
                 for p in products:
-                    # যদি ডাটাবেসে কাস্টম প্রাইস থাকে সেটা নিবে, না থাকলে API এর কেনা দামটাই দেখাবে
                     display_price = price_map.get(p['id'], p['price'])
                     
-                    # লাইভ স্টক চেক করার লজিক
                     stock_info = ""
                     if 'stock' in p and p['stock'] is not None:
                         stock_info = f" | স্টক: {p['stock']}টি"
@@ -377,33 +524,40 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         
                     btn_text = f"{p['name']} - ${display_price}{stock_info}"
                     
-                    keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"buy_{p['id']}")])
+                    # প্রোডাক্ট বাটনে success (সবুজ) কালার
+                    keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"buy_{p['id']}", style='primary')])
                     
-                keyboard.append([InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu')])
+                # ব্যাক বাটনে danger (লাল) কালার
+                keyboard.append([InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu', style='danger')])
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 await query.edit_message_text("🛒 আমাদের শপের প্রোডাক্টগুলো নিচে দেওয়া হলো। কিনতে ক্লিক করুন:", reply_markup=reply_markup)
+
             else:
-                keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu')]]
+                keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu', style='danger')]]
                 await query.edit_message_text("❌ হোস্ট API এর সাথে কানেক্ট করা যাচ্ছে না।", reply_markup=InlineKeyboardMarkup(keyboard))
         except Exception as e:
-            keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu')]]
+            keyboard = [[InlineKeyboardButton("🔙 ব্যাক (Back)", callback_data='start_menu', style='danger')]]
             await query.edit_message_text("❌ প্রোডাক্ট লোড করতে সমস্যা হয়েছে।", reply_markup=InlineKeyboardMarkup(keyboard))
             
         return ConversationHandler.END
-
-
         
     elif query.data == 'start_menu' or query.data == 'cancel_action':
         keyboard = [
-            [InlineKeyboardButton("🛒 শপ (Shop)", callback_data='shop')],
-            [InlineKeyboardButton("💰 ডিপোজিট (Deposit)", callback_data='deposit')],
-            [InlineKeyboardButton("👤 আমার একাউন্ট (My Account)", callback_data='account')],
-            [InlineKeyboardButton("🎁 রেফার এন্ড আর্ন (Refer & Earn)", callback_data='refer')],
-            [InlineKeyboardButton("📞 সাপোর্ট (Support)", callback_data='support')]
+            [InlineKeyboardButton("🛒 শপ (Shop)", callback_data='shop', style='primary'),
+             InlineKeyboardButton("💰 ডিপোজিট (Deposit)", callback_data='deposit', style='primary')],
+            [InlineKeyboardButton("👤 আমার একাউন্ট (My Account)", callback_data='account', style='primary'),
+             InlineKeyboardButton("🎁 রেফার এন্ড আর্ন (Refer & Earn)", callback_data='refer', style='success')],
+            [InlineKeyboardButton("📞 সাপোর্ট (Support)", callback_data='support', style='danger')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text("ডিজিটাল শপে স্বাগতম! 🛍️\n\nআপনার প্রয়োজনীয় সেবাটি বেছে নিন:", reply_markup=reply_markup)
+        
+        msg_text = (
+            "<blockquote><tg-emoji emoji-id='5368324170671202286'>✨</tg-emoji> <b>Welcome to darkorb1t Shop!</b></blockquote>\n\n"
+            "আপনার প্রয়োজনীয় সেবাটি বেছে নিন:"
+        )
+        await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=reply_markup)
         return ConversationHandler.END
+
 
 
 
@@ -412,7 +566,7 @@ async def process_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
     
     # সব মেসেজের সাথে ক্যানসেল বাটন দেখানোর জন্য কীবোর্ড সেটআপ
-    keyboard = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='cancel_action')]]
+    keyboard = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='cancel_action', style='danger')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
@@ -482,13 +636,19 @@ async def check_transaction_background(bot, chat_id, trx_id, wait_msg_id):
         
     # সবশেষে অটোমেটিক্যালি মেইন মেনু ওপেন করা
     keyboard = [
-        [InlineKeyboardButton("🛒 শপ (Shop)", callback_data='shop')],
-        [InlineKeyboardButton("💰 ডিপোজিট (Deposit)", callback_data='deposit')],
-        [InlineKeyboardButton("👤 আমার একাউন্ট (My Account)", callback_data='account')],
-        [InlineKeyboardButton("📞 সাপোর্ট (Support)", callback_data='support')]
+        [InlineKeyboardButton("🛒 শপ (Shop)", callback_data='shop', style='primary'),
+         InlineKeyboardButton("💰 ডিপোজিট (Deposit)", callback_data='deposit', style='primary')],
+        [InlineKeyboardButton("👤 আমার একাউন্ট (My Account)", callback_data='account', style='primary'),
+         InlineKeyboardButton("🎁 রেফার এন্ড আর্ন (Refer & Earn)", callback_data='refer', style='success')],
+        [InlineKeyboardButton("📞 সাপোর্ট (Support)", callback_data='support', style='danger')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await bot.send_message(chat_id=chat_id, text="ডিজিটাল শপে স্বাগতম! 🛍️\n\nআপনার প্রয়োজনীয় সেবাটি বেছে নিন:", reply_markup=reply_markup)
+    msg_text = (
+        "<blockquote><tg-emoji emoji-id='5368324170671202286'>✨</tg-emoji> <b>Welcome to darkorb1t Shop!</b></blockquote>\n\n"
+        "আপনার প্রয়োজনীয় সেবাটি বেছে নিন:"
+    )
+    await bot.send_message(chat_id=chat_id, text=msg_text, parse_mode='HTML', reply_markup=reply_markup)
+
 
 
 async def process_trxid(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -530,13 +690,20 @@ async def process_trxid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # সাথে সাথে মেনু দিয়ে দেওয়া
         keyboard = [
-            [InlineKeyboardButton("🛒 শপ (Shop)", callback_data='shop')],
-            [InlineKeyboardButton("💰 ডিপোজিট (Deposit)", callback_data='deposit')],
-            [InlineKeyboardButton("👤 আমার একাউন্ট (My Account)", callback_data='account')],
-            [InlineKeyboardButton("📞 সাপোর্ট (Support)", callback_data='support')]
+            [InlineKeyboardButton("🛒 শপ (Shop)", callback_data='shop', style='primary'),
+             InlineKeyboardButton("💰 ডিপোজিট (Deposit)", callback_data='deposit', style='primary')],
+            [InlineKeyboardButton("👤 আমার একাউন্ট (My Account)", callback_data='account', style='primary'),
+             InlineKeyboardButton("🎁 রেফার এন্ড আর্ন (Refer & Earn)", callback_data='refer', style='success')],
+            [InlineKeyboardButton("📞 সাপোর্ট (Support)", callback_data='support', style='danger')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("ডিজিটাল শপে স্বাগতম! 🛍️\n\nআপনার প্রয়োজনীয় সেবাটি বেছে নিন:", reply_markup=reply_markup)
+        msg_text = (
+            "<blockquote><tg-emoji emoji-id='5368324170671202286'>✨</tg-emoji> <b>Welcome to darkorb1t Shop!</b></blockquote>\n\n"
+            "আপনার প্রয়োজনীয় সেবাটি বেছে নিন:"
+        )
+        await update.message.reply_text(msg_text, parse_mode='HTML', reply_markup=reply_markup)
+
+
         
         return ConversationHandler.END
         
@@ -547,7 +714,7 @@ async def process_trxid(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
         conn.close()
         
-        wait_keyboard = [[InlineKeyboardButton("🔙 মেইন মেনু (Main Menu)", callback_data='start_menu')]]
+        wait_keyboard = [[InlineKeyboardButton("🔙 মেইন মেনু (Main Menu)", callback_data='start_menu', style='primary')]]
         wait_msg = await update.message.reply_text("⏳ আপনার ট্রানজেকশন ব্যাকগ্রাউন্ডে চেক করা হচ্ছে... (সর্বোচ্চ ১ মিনিট)\n\n*এই সময়ে আপনি বটের অন্যান্য মেনু ব্যবহার করতে পারেন।*", parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(wait_keyboard))
         
         asyncio.create_task(
@@ -605,7 +772,7 @@ async def process_purchase_start(update: Update, context: ContextTypes.DEFAULT_T
     
     display_price = float(db_res[0]) if db_res else api_buy_price
 
-    keyboard = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='cancel_action')]]
+    keyboard = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='cancel_action', style='danger')]]
     
     # HTML পার্স মোড ব্যবহার করা হলো যাতে ডেসক্রিপশনের ভেতরের লেখায় এরর না আসে
     msg_text = (
@@ -623,7 +790,7 @@ async def process_purchase_start(update: Update, context: ContextTypes.DEFAULT_T
 
 async def process_purchase_final(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
-    keyboard = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='cancel_action')]]
+    keyboard = [[InlineKeyboardButton("❌ ক্যানসেল (Cancel)", callback_data='cancel_action', style='danger')]]
     
     try:
         quantity = int(user_input)
@@ -829,8 +996,10 @@ if __name__ == '__main__':
         entry_points=[
             CallbackQueryHandler(button_click, pattern='^(deposit|account|support|shop|refer|start_menu|cancel_action)$'),
             CallbackQueryHandler(process_purchase_start, pattern='^buy_'),
-            CallbackQueryHandler(admin_product_click, pattern='^admin_prod_')
+            CallbackQueryHandler(admin_product_click, pattern='^admin_prod_'),
+            CallbackQueryHandler(admin_manage_users, pattern='^admin_manage_users$')
         ],
+
         states={
             ASK_AMOUNT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, process_amount),
@@ -856,6 +1025,19 @@ if __name__ == '__main__':
                 MessageHandler(filters.TEXT & ~filters.COMMAND, process_discount_price),
                 CallbackQueryHandler(admin_cancel_action, pattern='^admin_cancel$')
             ],
+            ASK_USER_ID: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, process_user_id),
+                CallbackQueryHandler(admin_cancel_action, pattern='^admin_cancel$')
+            ],
+            ASK_USER_ACTION: [
+                CallbackQueryHandler(admin_user_action, pattern='^admin_(add|deduct)_bal$'),
+                CallbackQueryHandler(admin_cancel_action, pattern='^admin_cancel$')
+            ],
+            ASK_USER_AMOUNT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, process_user_amount),
+                CallbackQueryHandler(admin_cancel_action, pattern='^admin_cancel$')
+            ],
+
         },
         fallbacks=[CommandHandler('cancel', cancel), CommandHandler('start', start)],
         allow_reentry=True  # এটি যেকোনো জায়গা থেকে মেনু রিস্টার্ট করতে সাহায্য করবে

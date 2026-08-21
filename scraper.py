@@ -2,7 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 
-def scrape_api_docs(start_url, output_file="api_documentation.txt", max_pages=30):
+def scrape_api_docs(start_url, output_file="api_documentation2.txt", max_pages=30):
     visited_urls = set()
     urls_to_visit = [start_url]
     base_domain = urlparse(start_url).netloc

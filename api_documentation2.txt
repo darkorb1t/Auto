@@ -1,0 +1,773 @@
+
+
+============================================================
+PAGE: Excalibur Shop Bot - API Documentation & Playground
+URL: https://arrsnetworkzone.in/docs
+============================================================
+
+Excalibur Shop Bot
+
+Developers
+
+API Reference
+
+Integrate seamlessly with the Excalibur Shop Bot platform. Use our RESTful endpoints to check your balance, monitor live product stock, and automate your purchases in real-time.
+
+Authentication
+
+Every API request requires your unique API Key to be passed via the
+X-API-Key
+HTTP header.
+
+X-API-Key
+
+Keep your API Key secret. If compromised, revoke it immediately via the Telegram Bot.
+
+Rate Limits
+
+To ensure platform stability, all API endpoints are rate-limited to
+3 requests per second
+per API Key.
+
+If you exceed this limit, the API will respond with HTTP status
+429 Too Many Requests
+.
+
+429 Too Many Requests
+
+Code Examples
+
+Use the snippets below to easily integrate the automated ordering endpoint into your application.
+
+curl -X POST https://arrsnetworkzone.in/api/v1/order ^
+  -H "X-API-Key: AK_YOUR_SECRET_KEY" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"service_id\": \"S_01\", \"quantity\": 1}"
+
+curl -X POST https://arrsnetworkzone.in/api/v1/order ^
+  -H "X-API-Key: AK_YOUR_SECRET_KEY" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"service_id\": \"S_01\", \"quantity\": 1}"
+
+import
+requests
+
+url =
+"https://arrsnetworkzone.in/api/v1/order"
+headers = {
+"X-API-Key"
+:
+"AK_YOUR_SECRET_KEY"
+}
+payload = {
+"service_id"
+:
+"S_01"
+,
+"quantity"
+:
+1
+}
+
+response = requests.post(url, json=payload, headers=headers)
+print(response.json())
+
+import
+requests
+
+url =
+"https://arrsnetworkzone.in/api/v1/order"
+headers = {
+"X-API-Key"
+:
+"AK_YOUR_SECRET_KEY"
+}
+payload = {
+"service_id"
+:
+"S_01"
+,
+"quantity"
+:
+1
+}
+
+response = requests.post(url, json=payload, headers=headers)
+print(response.json())
+
+const
+axios =
+require
+(
+'axios'
+);
+
+axios.post(
+'https://arrsnetworkzone.in/api/v1/order'
+, {
+  service_id:
+'S_01'
+,
+  quantity:
+1
+}, {
+  headers: {
+'X-API-Key'
+:
+'AK_YOUR_SECRET_KEY'
+}
+})
+.then(response => console.log(response.data))
+.catch(error => console.error(error.response.data));
+
+const
+axios =
+require
+(
+'axios'
+);
+
+axios.post(
+'https://arrsnetworkzone.in/api/v1/order'
+, {
+  service_id:
+'S_01'
+,
+  quantity:
+1
+}, {
+  headers: {
+'X-API-Key'
+:
+'AK_YOUR_SECRET_KEY'
+}
+})
+.then(response => console.log(response.data))
+.catch(error => console.error(error.response.data));
+
+<?php
+$ch = curl_init(
+'https://arrsnetworkzone.in/api/v1/order'
+);
+$payload = json_encode([
+'service_id'
+=>
+'S_01'
+,
+'quantity'
+=>
+1
+]);
+
+curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+'Content-Type: application/json'
+,
+'X-API-Key: AK_YOUR_SECRET_KEY'
+]);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER,
+true
+);
+
+$result = curl_exec($ch);
+curl_close($ch);
+echo $result;
+?>
+
+<?php
+$ch = curl_init(
+'https://arrsnetworkzone.in/api/v1/order'
+);
+$payload = json_encode([
+'service_id'
+=>
+'S_01'
+,
+'quantity'
+=>
+1
+]);
+
+curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+'Content-Type: application/json'
+,
+'X-API-Key: AK_YOUR_SECRET_KEY'
+]);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER,
+true
+);
+
+$result = curl_exec($ch);
+curl_close($ch);
+echo $result;
+?>
+
+/api/v1/me
+
+Fetch your profile information and real-time wallet balance.
+
+Example Response
+
+{
+"chat_id"
+:
+123456789
+,
+"first_name"
+:
+"John Doe"
+,
+"wallet_balance"
+:
+150.50
+}
+
+{
+"chat_id"
+:
+123456789
+,
+"first_name"
+:
+"John Doe"
+,
+"wallet_balance"
+:
+150.50
+}
+
+/api/v1/products
+
+List all available products on the platform, along with their pricing and exact stock amounts.
+
+Example Response
+
+{
+"services"
+: [
+    {
+"service_id"
+:
+"S_01"
+,
+"name"
+:
+"Gemini Pro 1 Month"
+,
+"price"
+:
+10.0
+,
+"stock"
+:
+42
+}
+  ]
+}
+
+{
+"services"
+: [
+    {
+"service_id"
+:
+"S_01"
+,
+"name"
+:
+"Gemini Pro 1 Month"
+,
+"price"
+:
+10.0
+,
+"stock"
+:
+42
+}
+  ]
+}
+
+/api/v1/order
+
+Place an automated order. Costs are deducted from your balance and product codes are returned instantly.
+
+Note on Stock:
+Depending on admin settings, the API may require a minimum stock buffer (e.g. 100 stock). If the buffer is active, API purchases can only be made from the stock available
+above
+the buffer limit.
+
+Request Payload
+
+{
+"service_id"
+:
+"S_01"
+,
+"quantity"
+:
+1
+}
+
+{
+"service_id"
+:
+"S_01"
+,
+"quantity"
+:
+1
+}
+
+Success Response
+
+{
+"success"
+:
+true
+,
+"order_id"
+:
+"API_ABC123XYZ"
+,
+"service_id"
+:
+"S_01"
+,
+"quantity"
+:
+1
+,
+"total_cost"
+:
+10.0
+,
+"new_balance"
+:
+140.50
+,
+"products"
+: [
+"CODE_12345"
+]
+}
+
+{
+"success"
+:
+true
+,
+"order_id"
+:
+"API_ABC123XYZ"
+,
+"service_id"
+:
+"S_01"
+,
+"quantity"
+:
+1
+,
+"total_cost"
+:
+10.0
+,
+"new_balance"
+:
+140.50
+,
+"products"
+: [
+"CODE_12345"
+]
+}
+
+Error Response
+
+{
+"error"
+:
+"Insufficient balance"
+}
+
+{
+"error"
+:
+"Insufficient balance"
+}
+
+/api/v1/orders
+
+Fetch your complete order history. Supports optional
+page
+and
+limit
+parameters (default is 50).
+Note: The maximum limit allowed is 200. Entering a value greater than 200 will return an error.
+
+page
+
+limit
+
+Example Request
+
+GET /api/v1/orders?page=1&limit=50
+
+Example Response
+
+{
+"success"
+:
+true
+,
+"page"
+:
+1
+,
+"limit"
+:
+50
+,
+"total_orders"
+:
+120
+,
+"total_pages"
+:
+3
+,
+"orders"
+: [
+    {
+"order_id"
+:
+"TRXN12345"
+,
+"service"
+:
+"Gemini Pro"
+,
+"quantity"
+:
+1
+,
+"amount"
+:
+10.0
+,
+"status"
+:
+"success"
+,
+"delivered_products"
+: [
+"CODE_XYZ"
+],
+"created_at"
+:
+"2026-07-09T08:00:00"
+}
+  ]
+}
+
+{
+"success"
+:
+true
+,
+"page"
+:
+1
+,
+"limit"
+:
+50
+,
+"total_orders"
+:
+120
+,
+"total_pages"
+:
+3
+,
+"orders"
+: [
+    {
+"order_id"
+:
+"TRXN12345"
+,
+"service"
+:
+"Gemini Pro"
+,
+"quantity"
+:
+1
+,
+"amount"
+:
+10.0
+,
+"status"
+:
+"success"
+,
+"delivered_products"
+: [
+"CODE_XYZ"
+],
+"created_at"
+:
+"2026-07-09T08:00:00"
+}
+  ]
+}
+
+/api/v1/order/{id}
+
+Fetch details of a specific order using its
+order_id
+.
+
+order_id
+
+Example Response
+
+{
+"success"
+:
+true
+,
+"order"
+: {
+"order_id"
+:
+"TRXN12345"
+,
+"service"
+:
+"Gemini Pro"
+,
+"quantity"
+:
+1
+,
+"amount"
+:
+10.0
+,
+"status"
+:
+"success"
+,
+"delivered_products"
+: [
+"CODE_XYZ"
+]
+  }
+}
+
+{
+"success"
+:
+true
+,
+"order"
+: {
+"order_id"
+:
+"TRXN12345"
+,
+"service"
+:
+"Gemini Pro"
+,
+"quantity"
+:
+1
+,
+"amount"
+:
+10.0
+,
+"status"
+:
+"success"
+,
+"delivered_products"
+: [
+"CODE_XYZ"
+]
+  }
+}
+
+/api/v1/stats
+
+Fetch comprehensive statistics for your account, including total deposits, total spends, and a per-product breakdown of your purchases. Supports optional custom date filtering.
+
+Query Parameters (Optional)
+
+start
+
+YYYY-MM-DD-HH:MM-AM/PM
+
+end
+
+YYYY-MM-DD-HH:MM-AM/PM
+
+Example Response
+
+{
+"success"
+:
+true
+,
+"deposits"
+: {
+"today"
+:
+10.0
+,
+"7d"
+:
+50.0
+,
+"30d"
+:
+200.0
+,
+"365d"
+:
+1500.0
+,
+"all_time"
+:
+2000.0
+},
+"sales"
+: {
+"today"
+:
+5.0
+,
+"7d"
+:
+30.0
+,
+"30d"
+:
+150.0
+,
+"365d"
+:
+1200.0
+,
+"all_time"
+:
+1800.0
+},
+"products_breakdown"
+: [
+    {
+"service_id"
+:
+"service_123"
+,
+"name"
+:
+"Premium Product"
+,
+"quantity_sold"
+:
+10
+,
+"revenue"
+:
+100.0
+}
+  ]
+}
+
+{
+"success"
+:
+true
+,
+"deposits"
+: {
+"today"
+:
+10.0
+,
+"7d"
+:
+50.0
+,
+"30d"
+:
+200.0
+,
+"365d"
+:
+1500.0
+,
+"all_time"
+:
+2000.0
+},
+"sales"
+: {
+"today"
+:
+5.0
+,
+"7d"
+:
+30.0
+,
+"30d"
+:
+150.0
+,
+"365d"
+:
+1200.0
+,
+"all_time"
+:
+1800.0
+},
+"products_breakdown"
+: [
+    {
+"service_id"
+:
+"service_123"
+,
+"name"
+:
+"Premium Product"
+,
+"quantity_sold"
+:
+10
+,
+"revenue"
+:
+100.0
+}
+  ]
+}
+
+Interactive Playground
+
+Enter your API key to test the endpoints.
+
+Click "Send Request" to see the output here.
+
+© 2026 Excalibur Shop Bot. All rights reserved.
+
